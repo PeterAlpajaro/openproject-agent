@@ -1,0 +1,59 @@
+services:
+  # Phase 2: MCP Server — exposes OpenProject tools via Streamable HTTP
+  mcp-server:
+    build: ./mcp-server
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - OPENPROJECT_URL=http://web:8080
+      - OPENPROJECT_API_TOKEN=${OPENPROJECT_API_TOKEN}
+    networks:
+      - default
+      - openproject_backend
+
+  # Phase 3: Orchestrator — bridges frontend, LLM, and MCP
+  orchestrator:
+    build: ./orchestrator
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - MCP_SERVER_URL=http://mcp-server:3000/mcp
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-my_local_dev_key}
+      - ANTHROPIC_BASE_URL=http://kiro-gateway:8000
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-20250514}
+    depends_on:
+      - mcp-server
+      - kiro-gateway
+
+  # Kiro Gateway — proxies Anthropic API calls through local Kiro credentials
+  kiro-gateway:
+    image: ghcr.io/jwadow/kiro-gateway:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - PROXY_API_KEY=${ANTHROPIC_API_KEY:-my_local_dev_key}
+      - KIRO_CREDS_FILE=/home/kiro/.aws/sso/cache/kiro-auth-token.json
+      - PROFILE_ARN=${PROFILE_ARN}
+    volumes:
+      - ~/.aws/sso/cache:/home/kiro/.aws/sso/cache:ro
+
+  # Phase 4: Nginx — reverse proxy with widget injection
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - orchestrator
+    networks:
+      - default
+      - openproject_backend
+
+networks:
+  openproject_backend:
+    external: true
+
+volumes: {}

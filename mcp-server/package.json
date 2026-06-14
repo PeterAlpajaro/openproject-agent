@@ -1,0 +1,21 @@
+{
+  "name": "openproject-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server exposing a tool to create Kanban tasks (Work Packages) in OpenProject",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "zod": "^3.24.1"
+  }
+}
