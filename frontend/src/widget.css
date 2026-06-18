@@ -45,13 +45,26 @@
   font-weight: 600;
 }
 
-.chat-widget__close {
+.chat-widget__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-widget__close,
+.chat-widget__reset {
   background: none;
   border: none;
   color: #fff;
   font-size: 18px;
   cursor: pointer;
   padding: 0 4px;
+  line-height: 1;
+}
+
+.chat-widget__reset:hover,
+.chat-widget__close:hover {
+  opacity: 0.8;
 }
 
 .chat-widget__messages {
