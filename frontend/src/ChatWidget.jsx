@@ -1,18 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-
-// Persist a session id for the life of the browser tab so the conversation
-// keeps its memory across messages (and page interactions within the tab).
-function getSessionId() {
-  const KEY = 'llm-chat-session-id'
-  let id = sessionStorage.getItem(KEY)
-  if (!id) {
-    id =
-      crypto.randomUUID?.() ??
-      `sess-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    sessionStorage.setItem(KEY, id)
-  }
-  return id
-}
+import { SESSION_KEY, loadOrCreateSessionId, resetSessionId } from './session'
 
 export default function ChatWidget() {
   const [open, setOpen] = useState(false)
@@ -20,7 +7,7 @@ export default function ChatWidget() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const listRef = useRef(null)
-  const sessionIdRef = useRef(getSessionId())
+  const sessionIdRef = useRef(loadOrCreateSessionId(sessionStorage))
 
   useEffect(() => {
     if (listRef.current) {
@@ -50,7 +37,7 @@ export default function ChatWidget() {
         // The server echoes back the session id (minting one on first contact).
         if (data.sessionId) {
           sessionIdRef.current = data.sessionId
-          sessionStorage.setItem('llm-chat-session-id', data.sessionId)
+          sessionStorage.setItem(SESSION_KEY, data.sessionId)
         }
         setMessages((prev) => [...prev, { role: 'assistant', text: data.reply }])
       } else {
@@ -72,11 +59,7 @@ export default function ChatWidget() {
       // Ignore — clearing local state is the important part.
     }
     // Start a fresh conversation with a new session id.
-    const newId =
-      crypto.randomUUID?.() ??
-      `sess-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    sessionIdRef.current = newId
-    sessionStorage.setItem('llm-chat-session-id', newId)
+    sessionIdRef.current = resetSessionId(sessionStorage)
   }
 
   return (

@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { trimHistory, mapMcpToolsToAnthropic } from "./lib/conversation.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -46,27 +47,6 @@ function getSession(sessionId) {
   return session;
 }
 
-// Keep the conversation from growing without bound. We trim from the front,
-// but never start the retained history on an "assistant"/tool turn, since the
-// Anthropic API requires tool_use and tool_result blocks to stay paired.
-function trimHistory(messages) {
-  if (messages.length <= MAX_HISTORY_MESSAGES) return messages;
-
-  let start = messages.length - MAX_HISTORY_MESSAGES;
-  while (start < messages.length && messages[start].role !== "user") {
-    start++;
-  }
-  // Also avoid starting on a user turn that only carries tool_result blocks.
-  while (
-    start < messages.length &&
-    Array.isArray(messages[start].content) &&
-    messages[start].content.some((b) => b.type === "tool_result")
-  ) {
-    start++;
-  }
-  return messages.slice(start);
-}
-
 // Periodically evict idle sessions so memory doesn't leak.
 setInterval(() => {
   const now = Date.now();
@@ -104,17 +84,6 @@ const anthropic = new Anthropic({
   apiKey: ANTHROPIC_API_KEY,
   baseURL: ANTHROPIC_BASE_URL,
 });
-
-// ---------------------------------------------------------------------------
-// Helper: Map MCP tool definitions to Anthropic tool schema
-// ---------------------------------------------------------------------------
-function mapMcpToolsToAnthropic(mcpTools) {
-  return mcpTools.map((tool) => ({
-    name: tool.name,
-    description: tool.description || "",
-    input_schema: tool.inputSchema || { type: "object", properties: {} },
-  }));
-}
 
 // ---------------------------------------------------------------------------
 // Agent loop — keeps calling the model and executing tools until the model
@@ -250,7 +219,7 @@ app.post("/api/chat", async (req, res) => {
     const reply = await runAgentLoop(session.messages, anthropicTools);
 
     // Trim and persist the updated history for next time.
-    session.messages = trimHistory(session.messages);
+    session.messages = trimHistory(session.messages, MAX_HISTORY_MESSAGES);
 
     return res.json({ reply, sessionId });
   } catch (err) {
