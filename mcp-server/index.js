@@ -23,8 +23,6 @@ if (!OPENPROJECT_API_TOKEN) {
 
 // HTTP Basic Auth: username "apikey", password is the API token.
 const authHeader = buildAuthHeader(OPENPROJECT_API_TOKEN);
-  "Basic " +
-  Buffer.from(`apikey:${OPENPROJECT_API_TOKEN ?? ""}`).toString("base64");
 
 // ---------------------------------------------------------------------------
 // Tool logic: create a Work Package (Kanban task) in OpenProject
@@ -33,18 +31,7 @@ async function createKanbanTask({ project_name, user_id, subject, description })
   const endpoint = `${OPENPROJECT_URL}/api/v3/work_packages`;
 
   // OpenProject HAL+JSON payload.
-  const payload = {
-    subject,
-    description: {
-      format: "markdown",
-      raw: description,
-    },
-    _links: {
-      project: { href: `/api/v3/projects/${project_name}` },
-      assignee: { href: `/api/v3/users/${user_id}` },
-      type: { href: "/api/v3/types/1" },
-    },
-  };
+  const payload = buildWorkPackagePayload({ project_name, user_id, subject, description });
 
   try {
     const response = await fetch(endpoint, {
