@@ -6,6 +6,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { buildAuthHeader, buildWorkPackagePayload } from "./lib/openproject.js";
 
 // ---------------------------------------------------------------------------
 // Configuration (pulled from the environment)
@@ -21,7 +22,7 @@ if (!OPENPROJECT_API_TOKEN) {
 }
 
 // HTTP Basic Auth: username "apikey", password is the API token.
-const authHeader =
+const authHeader = buildAuthHeader(OPENPROJECT_API_TOKEN);
   "Basic " +
   Buffer.from(`apikey:${OPENPROJECT_API_TOKEN ?? ""}`).toString("base64");
 
