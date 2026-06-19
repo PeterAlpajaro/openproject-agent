@@ -49,7 +49,7 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
     - Run `npm install && npm run lint && npm test` in each of `mcp-server/`, `orchestrator/`, `frontend/` and confirm all three are green. Ask the user if questions arise.
 
 - [ ] 2. Phase 2 — CI lint/test matrix (Req 3)
-  - [ ] 2.1 Create `.github/workflows/ci.yml` lint/test matrix
+  - [x] 2.1 Create `.github/workflows/ci.yml` lint/test matrix
     - Trigger on `push` to `main` and `pull_request` targeting `main`
     - Single job with matrix `service ∈ {mcp-server, orchestrator, frontend} × script ∈ {lint, test}` → six independent jobs; set `fail-fast: false`
     - Each cell: checkout, setup Node 20, `npm ci` in the service dir, then `npm run <script>`; `timeout-minutes: 15`
