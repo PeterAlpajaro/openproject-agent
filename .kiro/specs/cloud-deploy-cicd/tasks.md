@@ -48,7 +48,7 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
   - [x] 1.7 Checkpoint — verify Phase 1
     - Run `npm install && npm run lint && npm test` in each of `mcp-server/`, `orchestrator/`, `frontend/` and confirm all three are green. Ask the user if questions arise.
 
-- [ ] 2. Phase 2 — CI lint/test matrix (Req 3)
+- [x] 2. Phase 2 — CI lint/test matrix (Req 3)
   - [x] 2.1 Create `.github/workflows/ci.yml` lint/test matrix
     - Trigger on `push` to `main` and `pull_request` targeting `main`
     - Single job with matrix `service ∈ {mcp-server, orchestrator, frontend} × script ∈ {lint, test}` → six independent jobs; set `fail-fast: false`
@@ -56,16 +56,16 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
     - A failed `npm ci`, `lint`, or `test` fails that cell and names the service via the matrix label
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 2.5, 2.6_
 
-  - [ ] 2.2 Checkpoint — verify Phase 2
+  - [x] 2.2 Checkpoint — verify Phase 2
     - Open a PR to `main`; confirm six checks (3 services × 2 scripts) run, siblings finish when one fails, and status reports correctly. Ask the user if questions arise.
 
 - [ ] 3. Phase 3 — arm64 Docker build verification (Req 4)
-  - [ ] 3.1 Add `build-verify` job to `ci.yml`
+  - [x] 3.1 Add `build-verify` job to `ci.yml`
     - Use `docker/setup-qemu-action@v3` + `docker/setup-buildx-action@v3`; build `mcp-server`, `orchestrator`, and root-context `nginx/Dockerfile` for `platforms: linux/arm64` with `push: false`
     - Any failing image fails the job and names the offending image; per-step `timeout-minutes: 30` enforces the 1800s budget
     - _Requirements: 4.1, 4.2, 4.3, 4.5_
 
-  - [ ] 3.2 Add nginx widget-asset extraction step
+  - [x] 3.2 Add nginx widget-asset extraction step
     - Build the frontend stage with `docker buildx build --target <frontend-build-stage> --output type=local,dest=./_widget` and assert `widget.js` and `widget.css` exist with non-zero size; fail the job otherwise
     - _Requirements: 4.4_
 
