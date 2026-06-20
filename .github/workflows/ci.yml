@@ -19,7 +19,7 @@ jobs:
       # failure doesn't mask results from the other services/scripts.
       fail-fast: false
       matrix:
-        service: [mcp-server, orchestrator, frontend]
+        service: [mcp-server, orchestrator, frontend, ci]
         script: [lint, test]
     steps:
       - name: Checkout

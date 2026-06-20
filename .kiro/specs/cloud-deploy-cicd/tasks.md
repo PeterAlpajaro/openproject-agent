@@ -59,7 +59,7 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
   - [x] 2.2 Checkpoint — verify Phase 2
     - Open a PR to `main`; confirm six checks (3 services × 2 scripts) run, siblings finish when one fails, and status reports correctly. Ask the user if questions arise.
 
-- [ ] 3. Phase 3 — arm64 Docker build verification (Req 4)
+- [x] 3. Phase 3 — arm64 Docker build verification (Req 4)
   - [x] 3.1 Add `build-verify` job to `ci.yml`
     - Use `docker/setup-qemu-action@v3` + `docker/setup-buildx-action@v3`; build `mcp-server`, `orchestrator`, and root-context `nginx/Dockerfile` for `platforms: linux/arm64` with `push: false`
     - Any failing image fails the job and names the offending image; per-step `timeout-minutes: 30` enforces the 1800s budget
@@ -69,25 +69,25 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
     - Build the frontend stage with `docker buildx build --target <frontend-build-stage> --output type=local,dest=./_widget` and assert `widget.js` and `widget.css` exist with non-zero size; fail the job otherwise
     - _Requirements: 4.4_
 
-  - [ ] 3.3 Checkpoint — verify Phase 3
+  - [x] 3.3 Checkpoint — verify Phase 3
     - Push a commit; confirm the build job synth-builds all three arm64 images and nginx yields non-empty `widget.js`/`widget.css`. Ask the user if questions arise.
 
 - [ ] 4. Phase 4 — Publish images to GHCR (Req 5)
-  - [ ] 4.1 Implement `ci/lib/tags.js` and CI Vitest setup for `ci/lib/`
+  - [x] 4.1 Implement `ci/lib/tags.js` and CI Vitest setup for `ci/lib/`
     - Implement `deriveTags(fullSha)` → `{ sha7: first 7 chars, latest: "latest" }`
     - Add a root/`ci` Vitest config (plus `fast-check` devDependency) so `ci/lib/*.test.js` run independently of the three services
     - _Requirements: 5.2_
 
-  - [ ]* 4.2 Write property test for tag derivation
+  - [x]* 4.2 Write property test for tag derivation
     - **Property 1: Short-SHA tag derivation** — for any 40-char hex SHA, `sha7` is exactly the first 7 chars (length 7, prefix of input) and `latest` is constant
     - Tag: `// Feature: cloud-deploy-cicd, Property 1: ...`; generator `fc.hexaString({minLength:40,maxLength:40})`; `numRuns: 100`
     - **Validates: Requirements 5.2**
 
-  - [ ]* 4.3 Write unit tests for `tags.js`
+  - [x]* 4.3 Write unit tests for `tags.js`
     - Cover concrete/edge cases (lowercase/uppercase hex, known SHA → known sha7)
     - _Requirements: 5.2_
 
-  - [ ] 4.4 Create `.github/workflows/deploy.yml` publish job
+  - [x] 4.4 Create `.github/workflows/deploy.yml` publish job
     - Trigger only on `push` to `main` gated on a passing CI run; `permissions: packages: write`
     - `docker/login-action` to `ghcr.io` with `GITHUB_TOKEN` (fail closed, no push, no CD on login failure); compute tags via `node ci/lib/tags.js <full-sha>`
     - `docker/build-push-action` `platforms: linux/arm64`, `push: true`, tags `…:<sha7>` and `…:latest` for `mcp-server`, `orchestrator`, `nginx` only (never `kiro-gateway`); 3 retries for transient errors; per-image push `timeout-minutes: 10`; any push failure stops before CD
