@@ -1,0 +1,20 @@
+# Production overlay for the OpenProject AI Agent stack.
+#
+# Phase 5 (cloud-deploy-cicd): replace the local `build:` of the first-party
+# services with pre-built arm64 images pulled from GHCR, so the Oracle A1 VM
+# never compiles anything. IMAGE_TAG selects which published tag to run — the
+# deploy job sets it to the commit short SHA (enabling pinned, reversible
+# deploys); it defaults to `latest` when unset.
+#
+# NOTE: production network hardening (removing the host port bindings on
+# mcp-server/orchestrator/kiro-gateway, optional TLS on nginx) is layered on
+# in Phase 7. This file currently only pins images to the registry.
+services:
+  mcp-server:
+    image: ghcr.io/peteralpajaro/openproject-agent-mcp-server:${IMAGE_TAG:-latest}
+
+  orchestrator:
+    image: ghcr.io/peteralpajaro/openproject-agent-orchestrator:${IMAGE_TAG:-latest}
+
+  nginx:
+    image: ghcr.io/peteralpajaro/openproject-agent-nginx:${IMAGE_TAG:-latest}

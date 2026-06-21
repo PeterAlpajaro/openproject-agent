@@ -72,7 +72,7 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
   - [x] 3.3 Checkpoint — verify Phase 3
     - Push a commit; confirm the build job synth-builds all three arm64 images and nginx yields non-empty `widget.js`/`widget.css`. Ask the user if questions arise.
 
-- [ ] 4. Phase 4 — Publish images to GHCR (Req 5)
+- [x] 4. Phase 4 — Publish images to GHCR (Req 5)
   - [x] 4.1 Implement `ci/lib/tags.js` and CI Vitest setup for `ci/lib/`
     - Implement `deriveTags(fullSha)` → `{ sha7: first 7 chars, latest: "latest" }`
     - Add a root/`ci` Vitest config (plus `fast-check` devDependency) so `ci/lib/*.test.js` run independently of the three services
@@ -93,11 +93,11 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
     - `docker/build-push-action` `platforms: linux/arm64`, `push: true`, tags `…:<sha7>` and `…:latest` for `mcp-server`, `orchestrator`, `nginx` only (never `kiro-gateway`); 3 retries for transient errors; per-image push `timeout-minutes: 10`; any push failure stops before CD
     - _Requirements: 5.1, 5.3, 5.4, 5.5, 5.6_
 
-  - [ ] 4.5 Checkpoint — verify Phase 4
+  - [x] 4.5 Checkpoint — verify Phase 4
     - Merge to `main`; confirm three GHCR packages appear tagged `sha7` + `latest`. Ask the user if questions arise.
 
 - [ ] 5. Phase 5 — CD over SSH (Req 6)
-  - [ ] 5.1 Add `deploy` job (`needs: publish`) to `deploy.yml`
+  - [x] 5.1 Add `deploy` job (`needs: publish`) to `deploy.yml`
     - Key-based SSH to the A1 VM using the private key from `Secret_Store`; SSH auth failure aborts before delivering any artifact and reports an auth failure
     - `scp` `docker-compose.yml` + `docker-compose.prod.yml` to `/opt/openproject-agent`; run `docker compose pull` — on pull failure, abort and leave the prior stack untouched
     - Run `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d` only after a successful pull (rolling recreate preserves prior stack on failure)
