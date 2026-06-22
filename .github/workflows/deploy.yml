@@ -98,3 +98,150 @@ jobs:
             sleep 10
           done
           echo "Pushed ${IMAGE}:${SHA7} and ${IMAGE}:latest"
+
+  deploy:
+    name: Deploy to Oracle A1
+    # Runs only after all three images are published.
+    needs: publish
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    permissions:
+      contents: read
+      packages: read
+    env:
+      # Directory on the VM (relative to the SSH user's home) that holds the
+      # committed compose files and the existing .env. Phase 6 will automate
+      # .env delivery; Phase 5 relies on one already being present here.
+      DEPLOY_DIR: openproject-agent
+    steps:
+      - name: Checkout the exact commit CI validated
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Set up Node 20.18
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.18"
+
+      - name: Compute image tag (short SHA)
+        id: meta
+        run: echo "sha7=$(node ci/lib/tags.js "${{ github.event.workflow_run.head_sha }}")" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Copy compose files to the VM
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}"
+          $SSH "mkdir -p ~/${DEPLOY_DIR}"
+          scp -i ~/.ssh/deploy_key docker-compose.yml docker-compose.prod.yml \
+            "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/${DEPLOY_DIR}/"
+
+      - name: Validate required secrets are present
+        # Fails before anything is written to the VM, naming any missing value.
+        env:
+          OPENPROJECT_API_TOKEN: ${{ secrets.OPENPROJECT_API_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROFILE_ARN: ${{ secrets.PROFILE_ARN }}
+          CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+        run: node ci/lib/secrets.js check
+
+      - name: Classify Kiro token
+        # Missing/unparseable token is fatal; expiry is informational because
+        # the gateway refreshes the short-lived access token via the refresh token.
+        env:
+          KIRO_AUTH_TOKEN: ${{ secrets.KIRO_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          class=$(node ci/lib/token.js classify)
+          echo "Kiro token classification: ${class}"
+          if [ "$class" = "expired" ] || [ "$class" = "expiring_soon" ]; then
+            echo "::warning::Kiro access token is ${class}; the gateway will refresh it via the refresh token."
+          fi
+
+      - name: Generate .env on the VM (0600, atomic)
+        env:
+          OPENPROJECT_API_TOKEN: ${{ secrets.OPENPROJECT_API_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROFILE_ARN: ${{ secrets.PROFILE_ARN }}
+          CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+        run: |
+          # Rendered content is piped straight into ssh (never echoed). Secret
+          # values are also masked in logs by the runner. Temp file + mv keeps
+          # the write atomic so a failure never leaves a partial .env.
+          node ci/lib/secrets.js render | \
+            ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+              "umask 077; mkdir -p ~/${DEPLOY_DIR}; cat > ~/${DEPLOY_DIR}/.env.tmp \
+               && mv ~/${DEPLOY_DIR}/.env.tmp ~/${DEPLOY_DIR}/.env \
+               && chmod 600 ~/${DEPLOY_DIR}/.env"
+
+      - name: Deliver Kiro token to the VM (0600, atomic)
+        env:
+          KIRO_AUTH_TOKEN: ${{ secrets.KIRO_AUTH_TOKEN }}
+        run: |
+          printf '%s' "$KIRO_AUTH_TOKEN" | \
+            ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+              "umask 077; mkdir -p ~/.aws/sso/cache; cat > ~/.aws/sso/cache/kiro-auth-token.json.tmp \
+               && mv ~/.aws/sso/cache/kiro-auth-token.json.tmp ~/.aws/sso/cache/kiro-auth-token.json \
+               && chmod 600 ~/.aws/sso/cache/kiro-auth-token.json"
+
+      - name: Log in to GHCR on the VM
+        # Token piped via stdin (never on the command line). The short-lived
+        # GITHUB_TOKEN is valid only for this run; we log out at the end.
+        run: |
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" | \
+            ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+              "docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+
+      - name: Pull images and bring up the stack (rollback-safe)
+        env:
+          SHA7: ${{ steps.meta.outputs.sha7 }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "IMAGE_TAG='${SHA7}' DEPLOY_DIR='${DEPLOY_DIR}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd ~/"${DEPLOY_DIR}"
+          if [ ! -f .env ]; then
+            echo "::error::.env not found in ~/${DEPLOY_DIR} on the server. Phase 5 relies on an existing .env (Phase 6 automates this)."
+            exit 1
+          fi
+          COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+          # Pull first; on failure the previously running stack is left untouched.
+          if ! $COMPOSE pull; then
+            echo "::error::docker compose pull failed; leaving the existing stack untouched."
+            exit 1
+          fi
+          # Only recreate after a successful pull. --no-build uses the pulled
+          # images rather than building on the VM.
+          $COMPOSE up -d --no-build
+          REMOTE
+
+      - name: Health check (nginx on :8080)
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          deadline=$((SECONDS + 120))
+          until curl -fsS -o /dev/null http://localhost:8080; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::nginx did not return a healthy response on :8080 within 120s"
+              exit 1
+            fi
+            echo "waiting for nginx on :8080..."
+            sleep 10
+          done
+          echo "OK: nginx responded on :8080"
+          REMOTE
+
+      - name: Log out of GHCR on the VM
+        if: always()
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "docker logout ghcr.io || true"
