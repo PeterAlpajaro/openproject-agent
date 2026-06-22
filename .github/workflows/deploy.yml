@@ -145,6 +145,54 @@ jobs:
           scp -i ~/.ssh/deploy_key docker-compose.yml docker-compose.prod.yml \
             "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/${DEPLOY_DIR}/"
 
+      - name: Validate required secrets are present
+        # Fails before anything is written to the VM, naming any missing value.
+        env:
+          OPENPROJECT_API_TOKEN: ${{ secrets.OPENPROJECT_API_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROFILE_ARN: ${{ secrets.PROFILE_ARN }}
+          CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+        run: node ci/lib/secrets.js check
+
+      - name: Classify Kiro token
+        # Missing/unparseable token is fatal; expiry is informational because
+        # the gateway refreshes the short-lived access token via the refresh token.
+        env:
+          KIRO_AUTH_TOKEN: ${{ secrets.KIRO_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          class=$(node ci/lib/token.js classify)
+          echo "Kiro token classification: ${class}"
+          if [ "$class" = "expired" ] || [ "$class" = "expiring_soon" ]; then
+            echo "::warning::Kiro access token is ${class}; the gateway will refresh it via the refresh token."
+          fi
+
+      - name: Generate .env on the VM (0600, atomic)
+        env:
+          OPENPROJECT_API_TOKEN: ${{ secrets.OPENPROJECT_API_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROFILE_ARN: ${{ secrets.PROFILE_ARN }}
+          CLAUDE_MODEL: ${{ secrets.CLAUDE_MODEL }}
+        run: |
+          # Rendered content is piped straight into ssh (never echoed). Secret
+          # values are also masked in logs by the runner. Temp file + mv keeps
+          # the write atomic so a failure never leaves a partial .env.
+          node ci/lib/secrets.js render | \
+            ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+              "umask 077; mkdir -p ~/${DEPLOY_DIR}; cat > ~/${DEPLOY_DIR}/.env.tmp \
+               && mv ~/${DEPLOY_DIR}/.env.tmp ~/${DEPLOY_DIR}/.env \
+               && chmod 600 ~/${DEPLOY_DIR}/.env"
+
+      - name: Deliver Kiro token to the VM (0600, atomic)
+        env:
+          KIRO_AUTH_TOKEN: ${{ secrets.KIRO_AUTH_TOKEN }}
+        run: |
+          printf '%s' "$KIRO_AUTH_TOKEN" | \
+            ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+              "umask 077; mkdir -p ~/.aws/sso/cache; cat > ~/.aws/sso/cache/kiro-auth-token.json.tmp \
+               && mv ~/.aws/sso/cache/kiro-auth-token.json.tmp ~/.aws/sso/cache/kiro-auth-token.json \
+               && chmod 600 ~/.aws/sso/cache/kiro-auth-token.json"
+
       - name: Log in to GHCR on the VM
         # Token piped via stdin (never on the command line). The short-lived
         # GITHUB_TOKEN is valid only for this run; we log out at the end.

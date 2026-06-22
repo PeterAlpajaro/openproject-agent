@@ -108,39 +108,39 @@ Correctness-critical pure logic lives under `ci/lib/`: `tags.js` (Phase 4), `sec
     - Trigger a deploy; confirm the VM answers healthy on `:8080`, and a forced pull failure leaves the old stack running. Ask the user if questions arise.
 
 - [ ] 6. Phase 6 — Secrets and Kiro token (Req 7, 8)
-  - [ ] 6.1 Implement `ci/lib/secrets.js`
+  - [x] 6.1 Implement `ci/lib/secrets.js`
     - `validateSecrets(env)` → `{ ok, missing }` over the five required secrets (`OPENPROJECT_API_TOKEN`, `ANTHROPIC_API_KEY`, `PROFILE_ARN`, `CLAUDE_MODEL`, `OPENPROJECT_SECRET_KEY_BASE`), treating absent/empty as missing
     - `.env` rendering helper producing exactly one `NAME=value` line per required secret and no others
     - _Requirements: 7.1, 7.2, 7.7_
 
-  - [ ]* 6.2 Write property test for secret completeness validation
+  - [x]* 6.2 Write property test for secret completeness validation
     - **Property 2: Secret completeness validation** — `ok = true` with empty `missing` iff all five required names are present and non-empty; otherwise `missing` contains exactly the absent/empty required names and no others
     - Tag `// Feature: cloud-deploy-cicd, Property 2: ...`; record generators with random subsets omitted/blanked; `numRuns: 100`
     - **Validates: Requirements 7.1, 7.7**
 
-  - [ ]* 6.3 Write property test for `.env` rendering
+  - [x]* 6.3 Write property test for `.env` rendering
     - **Property 3: Environment file rendering** — for any complete mapping, the rendered content has exactly one `NAME=value` line per required secret with the supplied value and no line for any name outside the required set
     - Tag `// Feature: cloud-deploy-cicd, Property 3: ...`; `numRuns: 100`
     - **Validates: Requirements 7.2**
 
-  - [ ]* 6.4 Write unit tests for `secrets.js`
+  - [x]* 6.4 Write unit tests for `secrets.js`
     - Edge cases: all present, single missing, empty-string value, extra non-required names ignored
     - _Requirements: 7.1, 7.2, 7.7_
 
-  - [ ] 6.5 Implement `ci/lib/token.js`
+  - [x] 6.5 Implement `ci/lib/token.js`
     - `classifyToken(raw, now)` → `{ class, expiresAt? }` with `WARN_WINDOW_MS = 72h`; classes `missing` / `expired` / `expiring_soon` / `ok`; isolate the expiry field lookup from the real `kiro-auth-token.json` shape
     - _Requirements: 8.6, 8.7, 8.8_
 
-  - [ ]* 6.6 Write property test for Kiro token expiry classification
+  - [x]* 6.6 Write property test for Kiro token expiry classification
     - **Property 4: Kiro token expiry classification** — `missing` when absent/empty/unparseable; `expired` when expiry ≤ now; `expiring_soon` when now < expiry ≤ now+72h; `ok` when expiry > now+72h
     - Tag `// Feature: cloud-deploy-cicd, Property 4: ...`; `fc.date()` offsets around `now` and `now+72h` including exact boundaries; `numRuns: 100`
     - **Validates: Requirements 8.6, 8.7, 8.8**
 
-  - [ ]* 6.7 Write unit tests for `token.js`
+  - [x]* 6.7 Write unit tests for `token.js`
     - Real `kiro-auth-token.json` field shape, exact 72h boundary timestamp, malformed JSON
     - _Requirements: 8.6, 8.7, 8.8_
 
-  - [ ] 6.8 Wire secrets + token preflight and delivery into `deploy.yml` CD
+  - [x] 6.8 Wire secrets + token preflight and delivery into `deploy.yml` CD
     - Run `node ci/lib/secrets.js` and `node ci/lib/token.js` as preflight before any VM write; missing secrets / missing token / expired token halts before writing (expiring-soon warns and proceeds); GitHub masks all secret values in logs
     - Write `.env` via SSH heredoc with `umask 077` then `chmod 600`, using temp file + atomic `mv` (failure removes temp file, no partial `.env`); `.env` and token remain git-ignored
     - Write Kiro token to `~/.aws/sso/cache/kiro-auth-token.json` at `0600`; write failure halts without restarting gateway and leaves prior token; on success restart `kiro-gateway` and fail naming it if not running within 60s
