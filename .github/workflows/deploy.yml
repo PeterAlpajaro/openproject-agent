@@ -183,15 +183,24 @@ jobs:
                && mv ~/${DEPLOY_DIR}/.env.tmp ~/${DEPLOY_DIR}/.env \
                && chmod 600 ~/${DEPLOY_DIR}/.env"
 
-      - name: Deliver Kiro token to the VM (0600, atomic)
+      - name: Deliver Kiro token to the VM
         env:
           KIRO_AUTH_TOKEN: ${{ secrets.KIRO_AUTH_TOKEN }}
         run: |
+          # The token is bind-mounted into the kiro-gateway container, which
+          # runs as a different (non-ubuntu) uid. On native Linux, bind mounts
+          # preserve host uid/perms, so the path must be traversable/readable
+          # by the container user. We therefore use 0755 dirs + 0644 file
+          # rather than 0600. Tradeoff: any local user on this single-tenant VM
+          # could read the token (acceptable here); this deviates from the
+          # design's 0600 because 0600 makes the gateway fail with EACCES.
           printf '%s' "$KIRO_AUTH_TOKEN" | \
             ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-              "umask 077; mkdir -p ~/.aws/sso/cache; cat > ~/.aws/sso/cache/kiro-auth-token.json.tmp \
+              "mkdir -p ~/.aws/sso/cache \
+               && chmod 755 ~/.aws ~/.aws/sso ~/.aws/sso/cache \
+               && cat > ~/.aws/sso/cache/kiro-auth-token.json.tmp \
                && mv ~/.aws/sso/cache/kiro-auth-token.json.tmp ~/.aws/sso/cache/kiro-auth-token.json \
-               && chmod 600 ~/.aws/sso/cache/kiro-auth-token.json"
+               && chmod 644 ~/.aws/sso/cache/kiro-auth-token.json"
 
       - name: Log in to GHCR on the VM
         # Token piped via stdin (never on the command line). The short-lived
@@ -228,16 +237,20 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "bash -s" <<'REMOTE'
           set -euo pipefail
+          # Probe the widget asset, which nginx serves directly from disk. This
+          # confirms the reverse proxy is up and serving without depending on
+          # OpenProject's Host-header validation (a bare GET / with Host
+          # localhost:8080 is rejected because OPENPROJECT_HOST__NAME differs).
           deadline=$((SECONDS + 120))
-          until curl -fsS -o /dev/null http://localhost:8080; do
+          until curl -fsS -o /dev/null http://localhost:8080/widget/widget.js; do
             if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::nginx did not return a healthy response on :8080 within 120s"
+              echo "::error::nginx did not serve /widget/widget.js on :8080 within 120s"
               exit 1
             fi
             echo "waiting for nginx on :8080..."
             sleep 10
           done
-          echo "OK: nginx responded on :8080"
+          echo "OK: nginx served the widget asset on :8080"
           REMOTE
 
       - name: Log out of GHCR on the VM
